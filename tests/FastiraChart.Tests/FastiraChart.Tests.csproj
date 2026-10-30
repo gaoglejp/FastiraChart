@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A console test runner: it uses only FastiraChart's public API and needs no test framework package, so the
+    repository builds and tests without any external NuGet dependency.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>FastiraChart.Tests</RootNamespace>
+    <AssemblyName>FastiraChart.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FastiraChart\FastiraChart.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,60 @@
+# Build output (every project builds into its own bin/ and obj/)
+bin/
+obj/
+/artifacts/
+*.binlog
+[Bb]uild[Ll]og.*
+
+# Visual Studio / Rider / VS Code per-user state
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+*.DotSettings.user
+
+# Test and coverage output
+TestResults/
+*.coverage
+*.coveragexml
+coverage*.json
+coverage*.xml
+coverage*.info
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+project.lock.json
+project.assets.json
+
+# Publish output
+*.pubxml
+*.pubxml.user
+
+# Temporary and OS files
+*.tmp
+*.log
+*.swp
+*~
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Crash and profiling output
+*.dmp
+*.diagsession
+*.etl
+
+# Secrets and credentials: never commit
+*.pfx
+*.p12
+*.snk
+*.key
+*.pem
+secrets.json
+.env
+.env.*

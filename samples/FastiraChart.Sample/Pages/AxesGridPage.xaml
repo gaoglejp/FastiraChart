@@ -1,0 +1,60 @@
+<UserControl x:Class="FastiraChart.Sample.Pages.AxesGridPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fc="urn:fastirachart:wpf">
+    <DockPanel>
+        <ScrollViewer DockPanel.Dock="Right" VerticalScrollBarVisibility="Auto">
+            <StackPanel Style="{StaticResource OptionsPanel}">
+                <TextBlock Style="{StaticResource OptionHeader}" Text="X axis" />
+                <TextBlock Text="XAxisPosition" />
+                <ComboBox x:Name="XPosition" SelectedItem="{Binding XAxisPosition, ElementName=Chart}" />
+                <TextBlock Text="XAxisLabelRotation" />
+                <ComboBox x:Name="XRotation" SelectedItem="{Binding XAxisLabelRotation, ElementName=Chart}" />
+                <TextBlock Text="XAxisLabelAnchor" />
+                <ComboBox x:Name="XAnchor" SelectedItem="{Binding XAxisLabelAnchor, ElementName=Chart}" />
+                <TextBlock Text="{Binding XAxisTargetTickCount, ElementName=Chart, StringFormat='XAxisTargetTickCount: {0}'}" />
+                <Slider Minimum="2" Maximum="30" IsSnapToTickEnabled="True" TickFrequency="1"
+                        Value="{Binding XAxisTargetTickCount, ElementName=Chart}" />
+                <CheckBox Content="IsXAxisVisible" IsChecked="{Binding IsXAxisVisible, ElementName=Chart}" />
+
+                <TextBlock Style="{StaticResource OptionHeader}" Text="Y axis" />
+                <TextBlock Text="YAxisPosition" />
+                <ComboBox x:Name="YPosition" SelectedItem="{Binding YAxisPosition, ElementName=Chart}" />
+                <TextBlock Text="YAxisLabelRotation" />
+                <ComboBox x:Name="YRotation" SelectedItem="{Binding YAxisLabelRotation, ElementName=Chart}" />
+                <TextBlock Text="YAxisLabelAnchor" />
+                <ComboBox x:Name="YAnchor" SelectedItem="{Binding YAxisLabelAnchor, ElementName=Chart}" />
+                <TextBlock Text="{Binding YAxisTargetTickCount, ElementName=Chart, StringFormat='YAxisTargetTickCount: {0}'}" />
+                <Slider Minimum="2" Maximum="30" IsSnapToTickEnabled="True" TickFrequency="1"
+                        Value="{Binding YAxisTargetTickCount, ElementName=Chart}" />
+                <CheckBox Content="IsYAxisVisible" IsChecked="{Binding IsYAxisVisible, ElementName=Chart}" />
+
+                <TextBlock Style="{StaticResource OptionHeader}" Text="Space" />
+                <TextBlock Style="{StaticResource Hint}"
+                           Text="MinimumAxisSpace reserves at least this much room per edge (left, top, right, bottom); the labels may ask for more." />
+                <TextBlock Text="{Binding LabelGap, ElementName=Chart, StringFormat='LabelGap: {0:0}'}" />
+                <Slider Minimum="0" Maximum="20" Value="{Binding LabelGap, ElementName=Chart}" />
+
+                <TextBlock Style="{StaticResource OptionHeader}" Text="Grid and origin" />
+                <CheckBox Content="IsHorizontalMajorGridVisible" IsChecked="{Binding IsHorizontalMajorGridVisible, ElementName=Chart}" />
+                <CheckBox Content="IsVerticalMajorGridVisible" IsChecked="{Binding IsVerticalMajorGridVisible, ElementName=Chart}" />
+                <CheckBox Content="IsHorizontalOriginLineVisible" IsChecked="{Binding IsHorizontalOriginLineVisible, ElementName=Chart}" />
+                <CheckBox Content="IsVerticalOriginLineVisible" IsChecked="{Binding IsVerticalOriginLineVisible, ElementName=Chart}" />
+            </StackPanel>
+        </ScrollViewer>
+
+        <fc:FastiraChartControl x:Name="Chart"
+                                MinimumX="-50" MaximumX="150"
+                                MinimumY="-1.25" MaximumY="1.25"
+                                MinimumAxisSpace="56,24,56,48"
+                                XAxisLabelRotation="Degree90"
+                                XAxisLabelAnchor="End"
+                                XAxisTargetTickCount="12"
+                                MajorGridThickness="1"
+                                OriginLineThickness="1.5">
+            <fc:FastiraChartControl.Series>
+                <fc:LineSeries x:Name="Wave" />
+            </fc:FastiraChartControl.Series>
+        </fc:FastiraChartControl>
+    </DockPanel>
+</UserControl>

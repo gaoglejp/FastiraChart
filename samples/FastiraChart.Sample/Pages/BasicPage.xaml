@@ -1,0 +1,24 @@
+<UserControl x:Class="FastiraChart.Sample.Pages.BasicPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fc="urn:fastirachart:wpf">
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Style="{StaticResource OptionsPanel}">
+            <TextBlock Style="{StaticResource OptionHeader}" Text="Basic" />
+            <TextBlock Style="{StaticResource Hint}"
+                       Text="Two LineSeries declared in XAML, their Points set from code. The axis ranges are MinimumX / MaximumX and MinimumY / MaximumY; nothing is derived from the data." />
+            <TextBlock Style="{StaticResource OptionHeader}" Text="Plot bounds" />
+            <TextBlock Text="{Binding PlotBounds, ElementName=Chart}" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <fc:FastiraChartControl x:Name="Chart"
+                                MinimumX="0" MaximumX="100"
+                                MinimumY="-1.5" MaximumY="1.5"
+                                MinimumAxisSpace="48,8,16,32">
+            <fc:FastiraChartControl.Series>
+                <fc:LineSeries x:Name="Wave" Stroke="#FF4FA3E8" StrokeThickness="2" />
+                <fc:LineSeries x:Name="Slow" Stroke="#FFE8A34F" StrokeThickness="1.5" />
+            </fc:FastiraChartControl.Series>
+        </fc:FastiraChartControl>
+    </DockPanel>
+</UserControl>

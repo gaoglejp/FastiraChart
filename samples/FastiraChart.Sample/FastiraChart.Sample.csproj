@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>FastiraChart.Sample</RootNamespace>
+    <AssemblyName>FastiraChart.Sample</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- Built from source until the FastiraChart package is published; then this becomes a PackageReference. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FastiraChart\FastiraChart.csproj" />
+  </ItemGroup>
+
+</Project>

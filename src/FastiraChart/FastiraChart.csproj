@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <RootNamespace>FastiraChart</RootNamespace>
+    <AssemblyName>FastiraChart</AssemblyName>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>FastiraChart</PackageId>
+    <Version>0.1.0</Version>
+    <Product>FastiraChart</Product>
+    <Authors>gaoglejp</Authors>
+    <Copyright>Copyright (c) 2026 gaoglejp</Copyright>
+    <Description>A Windows-only WPF chart control for .NET 10 designed with update performance as a primary goal.</Description>
+    <PackageTags>wpf;chart;plot;visualization;dotnet;windows</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/gaoglejp/FastiraChart</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/gaoglejp/FastiraChart</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <!--
+    Release builds record source paths relative to the repository root (/_/), so no build-machine path is embedded in
+    the packaged assembly or its symbols. Source Link is not enabled; it can be added later.
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <PathMap>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\'))=/_/</PathMap>
+  </PropertyGroup>
+  <PropertyGroup>
+    <EnableSourceLink>false</EnableSourceLink>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+  <!--
+    FastiraChart has no third-party NuGet dependencies: only Windows / .NET built-in functionality is used.
+    Any renderer requiring external dependencies stays optional and out of this project.
+  -->
+
+</Project>

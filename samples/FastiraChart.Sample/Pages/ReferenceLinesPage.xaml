@@ -1,0 +1,37 @@
+<UserControl x:Class="FastiraChart.Sample.Pages.ReferenceLinesPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fc="urn:fastirachart:wpf">
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Style="{StaticResource OptionsPanel}">
+            <TextBlock Style="{StaticResource OptionHeader}" Text="Reference lines" />
+            <TextBlock Style="{StaticResource Hint}"
+                       Text="Each ChartReferenceLine marks one value: Axis=&quot;Y&quot; draws a horizontal line at a Y value, Axis=&quot;X&quot; a vertical line at an X value. Stroke and StrokeThickness style a line; a line without a Stroke uses the chart's ReferenceLineBrush." />
+
+            <TextBlock x:Name="ThresholdText" Style="{StaticResource OptionHeader}" />
+            <Slider x:Name="ThresholdSlider" Minimum="-1" Maximum="1" Value="0.6" ValueChanged="OnThresholdChanged" />
+
+            <TextBlock x:Name="MarkerText" Style="{StaticResource OptionHeader}" />
+            <Slider x:Name="MarkerSlider" Minimum="0" Maximum="100" Value="70" ValueChanged="OnMarkerChanged" />
+
+            <CheckBox Content="Show the lower limit" IsChecked="True" Checked="OnLowerChecked" Unchecked="OnLowerChecked" />
+        </StackPanel>
+
+        <fc:FastiraChartControl x:Name="Chart"
+                                MinimumX="0" MaximumX="100"
+                                MinimumY="-1.25" MaximumY="1.25"
+                                MinimumAxisSpace="48,8,16,32">
+            <fc:FastiraChartControl.ReferenceLines>
+                <!-- A Y line is horizontal: an upper threshold. -->
+                <fc:ChartReferenceLine x:Name="Threshold" Axis="Y" Value="0.6" Stroke="#FFE85F5F" StrokeThickness="1.5" />
+                <!-- Another Y line with the chart's ReferenceLineBrush. -->
+                <fc:ChartReferenceLine x:Name="LowerLimit" Axis="Y" Value="-0.8" />
+                <!-- An X line is vertical: an event marker. -->
+                <fc:ChartReferenceLine x:Name="Marker" Axis="X" Value="70" Stroke="#FF7FD18B" StrokeThickness="2" />
+            </fc:FastiraChartControl.ReferenceLines>
+            <fc:FastiraChartControl.Series>
+                <fc:LineSeries x:Name="Wave" />
+            </fc:FastiraChartControl.Series>
+        </fc:FastiraChartControl>
+    </DockPanel>
+</UserControl>

@@ -1,0 +1,28 @@
+<Window x:Class="FastiraChart.Sample.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:pages="clr-namespace:FastiraChart.Sample.Pages"
+        Title="FastiraChart Sample"
+        Width="1100" Height="720"
+        WindowStartupLocation="CenterScreen">
+    <TabControl Margin="6">
+        <TabItem Header="Basic">
+            <pages:BasicPage />
+        </TabItem>
+        <TabItem Header="Streaming">
+            <pages:StreamingPage />
+        </TabItem>
+        <TabItem Header="Axes &amp; Grid">
+            <pages:AxesGridPage />
+        </TabItem>
+        <TabItem Header="Reference Lines">
+            <pages:ReferenceLinesPage />
+        </TabItem>
+        <TabItem Header="Lens">
+            <pages:LensPage />
+        </TabItem>
+        <TabItem Header="Interaction">
+            <pages:InteractionPage />
+        </TabItem>
+    </TabControl>
+</Window>

@@ -1,0 +1,132 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:local="clr-namespace:FastiraChart">
+
+    <!--
+        Default style and template for FastiraChartControl.
+
+        The border establishes the component's visible surface and applies
+        BorderThickness only. It deliberately does NOT bind Padding: the control
+        applies padding itself in ArrangeOverride, as part of computing the plot
+        area, and arranges PART_ContentHost onto the result. Binding Padding here
+        as well would subtract it twice. The same holds for MinimumAxisSpace: it is
+        applied in ArrangeOverride and must not be bound here either.
+
+        PART_ContentHost is deliberately an empty Grid: it makes the plot area real
+        and measurable without committing to any layer structure. It covers the plot
+        area only, never the axis bands; a host or a subclass may put content there.
+
+        Every other part is a layer host, into which the control places a single
+        drawing element; there is deliberately no element per tick, label, line or
+        point. The parts' order in the root Grid is their z-order, and that order is
+        the contract:
+
+            Border                  plot background
+            PART_GridHost           major grid
+            PART_ReferenceLineHost  reference lines, then origin lines
+            PART_SeriesHost         series, in collection order
+            PART_ContentHost        plot content put there by a host or a subclass
+            PART_LensHost           lens overlay and the chart inside it
+            PART_InteractionHost    crosshair, then tooltip
+            PART_AxisHost           tick marks, then labels
+
+        So the grid is never painted over a tick or a label; a reference or origin
+        line is drawn over a grid line at the same value; a series is drawn over the
+        grid, reference and origin lines; the lens covers the main plot content
+        beneath it; the crosshair is drawn over the series and the lens it reads; and
+        nothing is ever drawn over a tick or a label. The tooltip is kept inside the
+        plot.
+
+        Every layer host spans the whole control, so each element is placed by the
+        very expressions its tick and grid line are. ClipToPlotArea clips the series
+        to the plot; with it off, the series is not clipped by the control at all.
+        The lens takes no part in the layout: showing, moving or resizing it never
+        moves the plot. The drawing hosts are not hit-testable: the overlay never
+        takes a press, a wheel or a move from the chart.
+
+        A replacement template need not supply every part. A missing part does not
+        fail: the layer it hosts is not drawn (a missing PART_LensHost draws no
+        lens; a missing PART_InteractionHost draws no crosshair or tooltip, and
+        every gesture still works).
+
+        Ticks are drawn only inside the reserved axis bands; grid, origin and
+        reference lines only inside the plot.
+
+        No Width, Height, MinWidth, MinHeight, MaxWidth or MaxHeight is set. The
+        control must not request a size of its own, and the WPF defaults (Width and
+        Height NaN, Min 0, Max infinity, alignment Stretch) are already correct.
+        Setting them here would only make them harder for a host to override.
+    -->
+    <Style TargetType="{x:Type local:FastiraChartControl}">
+        <Setter Property="Background" Value="#FF1B1B1F" />
+        <Setter Property="BorderBrush" Value="#FF3A3A42" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="0" />
+        <!--
+            Tick marks are stroked with Foreground. Reusing an existing Control property
+            keeps them stylable without a tick-specific styling API.
+        -->
+        <Setter Property="Foreground" Value="#FFA8A8B4" />
+        <!--
+            Major grid: visible against the default background, well below the tick and label
+            brush so the grid reads as a guide and not as data.
+        -->
+        <Setter Property="MajorGridBrush" Value="#FF34343E" />
+        <!--
+            Origin and reference lines. The origin is a brighter neutral than the grid, and at
+            1.5 DIP heavier, so the line that means zero reads above the grid line it
+            lies on; it stays below the tick and label brush so it is not mistaken for
+            an axis. Reference lines take a muted warm accent, so a caller's marker is
+            told apart from both the neutral grid and the neutral origin by hue.
+        -->
+        <Setter Property="OriginLineBrush" Value="#FF6E6E7C" />
+        <Setter Property="ReferenceLineBrush" Value="#FFB08A4E" />
+        <!--
+            Series fallback stroke, for a LineSeries that names no
+            Stroke of its own: a saturated blue that reads as data against the default background and is
+            told apart by hue from the neutral grid and origin and the warm
+            reference lines.
+        -->
+        <Setter Property="SeriesStroke" Value="#FF4FA3E8" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type local:FastiraChartControl}">
+                    <!--
+                        The parts are SIBLINGS in a root Grid, not nested.
+
+                        That is deliberate and load-bearing. The control arranges
+                        PART_ContentHost itself, in the control's own coordinate space,
+                        offsetting by BorderThickness to land inside the border. That
+                        arithmetic is only correct while the part's visual parent spans the
+                        whole control. Nesting the part inside the Border would inset its
+                        parent by the border thickness and silently subtract it twice.
+
+                        The Border therefore paints background and border only and has no
+                        child. PART_AxisHost spans the whole control so that tick marks,
+                        which live outside the plot in the reserved axis bands, share the same
+                        coordinate space the control computes them in. PART_GridHost spans it
+                        for the same reason: a grid line is computed in that space by the same
+                        expression as its tick, and only the drawing is clipped to the plot.
+
+                        No Padding binding here by design, and none for MinimumAxisSpace either: see
+                        the note above.
+                    -->
+                    <Grid>
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                SnapsToDevicePixels="True" />
+                        <Grid x:Name="PART_GridHost" IsHitTestVisible="False" />
+                        <Grid x:Name="PART_ReferenceLineHost" IsHitTestVisible="False" />
+                        <Grid x:Name="PART_SeriesHost" IsHitTestVisible="False" />
+                        <Grid x:Name="PART_ContentHost" />
+                        <Grid x:Name="PART_LensHost" IsHitTestVisible="False" />
+                        <Grid x:Name="PART_InteractionHost" IsHitTestVisible="False" />
+                        <Grid x:Name="PART_AxisHost" IsHitTestVisible="False" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>
