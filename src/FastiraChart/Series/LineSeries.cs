@@ -12,7 +12,7 @@ namespace FastiraChart.Series;
 /// mapping the ticks, the grid, the origin and the reference lines use, against the control's own X and Y
 /// ranges, so a point at a tick's value lands exactly on that tick's grid line. Point 0 is
 /// joined to point 1, point 1 to point 2, and so on, in the order given: points are never sorted, merged or
-/// thinned out.
+/// thinned out, unless the series asks for what it draws to be reduced (<see cref="IsRenderReductionEnabled"/>).
 /// </para>
 /// <para>
 /// <b>A point that is not finite is a gap.</b> The line stops at the last finite point before it and starts
@@ -91,8 +91,16 @@ public sealed class LineSeries : Freezable
             nameof(StrokeThickness),
             typeof(double),
             typeof(LineSeries),
-            new PropertyMetadata(DefaultStrokeThickness, OnStyleInputChanged),
+            new PropertyMetadata(DefaultStrokeThickness, OnStrokeThicknessChanged),
             IsValidThickness);
+
+    /// <summary>Identifies the <see cref="IsRenderReductionEnabled"/> dependency property.</summary>
+    public static readonly DependencyProperty IsRenderReductionEnabledProperty =
+        DependencyProperty.Register(
+            nameof(IsRenderReductionEnabled),
+            typeof(bool),
+            typeof(LineSeries),
+            new PropertyMetadata(false, OnGeometryInputChanged));
 
     /// <summary>Initial stroke thickness of a series line, in DIP.</summary>
     /// <remarks>
@@ -191,6 +199,37 @@ public sealed class LineSeries : Freezable
     {
         get => (double)GetValue(StrokeThicknessProperty);
         set => SetValue(StrokeThicknessProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets whether the line may be drawn from fewer points than the series has, to stay fast at large point
+    /// counts. The default is false: every point is drawn.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Drawing only.</b> <see cref="Points"/> is untouched and reads back every point. The chart's main plot and its lens
+    /// each reduce what they draw for their own scale, and a change of range, size or DPI reduces again from all the points.
+    /// </para>
+    /// <para>
+    /// <b>What is kept.</b> The plot is divided into two columns per device pixel. Of consecutive points in one column,
+    /// the first, the last, the lowest and the highest are kept, so a spike of one point stays. A point that is kept is
+    /// not moved, and a gap stays a gap. While <see cref="FastiraChartControl.ClipToPlotArea"/> is true, lines that cannot
+    /// reach the plot are left out too. A series with fewer than about 16 points per column is not reduced at all.
+    /// </para>
+    /// <para>
+    /// <b>The result is close, not identical.</b> The extent of the line in each column is kept, but antialiasing sees
+    /// fewer lines, so a dense or noisy line can look somewhat lighter than it does with every point drawn.
+    /// </para>
+    /// <para>
+    /// <b>Where it does not help.</b> X may run in any order, but only consecutive points in one column merge, so a series
+    /// that moves across columns with nearly every point draws nearly all of them. The series is still walked point by
+    /// point whenever it is built again, so the cost of each build keeps growing with the point count, at a far lower rate.
+    /// </para>
+    /// </remarks>
+    public bool IsRenderReductionEnabled
+    {
+        get => (bool)GetValue(IsRenderReductionEnabledProperty);
+        set => SetValue(IsRenderReductionEnabledProperty, value);
     }
 
     /// <summary>
@@ -303,7 +342,10 @@ public sealed class LineSeries : Freezable
         SetCurrentValue(PointsProperty, Array.Empty<ChartPoint>());
     }
 
-    /// <summary>Counts the changes to what this series' geometry is built from: its points.</summary>
+    /// <summary>
+    /// Counts the changes to what this series' geometry is built from: its points, whether it is reduced, and while it is,
+    /// its thickness.
+    /// </summary>
     /// <remarks>
     /// <para>
     /// The control keeps each series' geometry between frames and builds it again only when this has
@@ -365,13 +407,27 @@ public sealed class LineSeries : Freezable
     /// <summary>Reads a null list back as an empty one, so a reader never has to test for it.</summary>
     private static object CoercePoints(DependencyObject d, object? value) => value ?? Array.Empty<ChartPoint>();
 
-    /// <summary>Counts a change to the points; see <see cref="GeometryGeneration"/>.</summary>
+    /// <summary>Counts a change to the points or to whether they are reduced; see <see cref="GeometryGeneration"/>.</summary>
     private static void OnGeometryInputChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         => ((LineSeries)d).GeometryGeneration++;
 
-    /// <summary>Counts a change to the stroke, inside it, or to the thickness; see <see cref="StyleGeneration"/>.</summary>
+    /// <summary>Counts a change to the stroke or inside it; see <see cref="StyleGeneration"/>.</summary>
     private static void OnStyleInputChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         => ((LineSeries)d).StyleGeneration++;
+
+    /// <summary>Counts a change to the thickness: always a style, and for a reduced series a geometry input as well.</summary>
+    /// <remarks>Reduction leaves out what is further off the plot than the stroke reaches, so it depends on how far that is.</remarks>
+    private static void OnStrokeThicknessChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var series = (LineSeries)d;
+
+        series.StyleGeneration++;
+
+        if (series.IsRenderReductionEnabled)
+        {
+            series.GeometryGeneration++;
+        }
+    }
 
     /// <summary>Accepts a finite, non-negative thickness.</summary>
     private static bool IsValidThickness(object value) => value is double d && double.IsFinite(d) && d >= 0;

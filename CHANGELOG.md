@@ -19,7 +19,7 @@ First public preview.
 - Layout: padding, minimum plot width, height and ratio, and the resulting `PlotBounds`.
 - Major grid, origin lines and caller-defined reference lines (`ChartReferenceLine`, X or Y).
 - `LineSeries` with `Points` (replace), `Append`, `AppendRange` and `ClearPoints`; non-finite points are drawn as gaps;
-  optional clipping to the plot area.
+  optional clipping to the plot area; optional `IsRenderReductionEnabled` to draw large series from fewer points.
 - Lens: a magnified view of an X range drawn inside the plot.
 - Interaction, each off by default: wheel zoom, drag pan, lens drag and lens zoom, crosshair and tooltip.
 - Custom control templates with seven optional template parts.

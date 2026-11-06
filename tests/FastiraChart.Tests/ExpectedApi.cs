@@ -156,6 +156,8 @@ internal static class ExpectedApi
         "FastiraChart.Series.LineSeries.AppendRange",
         "FastiraChart.Series.LineSeries.ClearPoints",
         "FastiraChart.Series.LineSeries.CreateInstanceCore",
+        "FastiraChart.Series.LineSeries.IsRenderReductionEnabled",
+        "FastiraChart.Series.LineSeries.IsRenderReductionEnabledProperty",
         "FastiraChart.Series.LineSeries.IsVisible",
         "FastiraChart.Series.LineSeries.IsVisibleProperty",
         "FastiraChart.Series.LineSeries.Points",

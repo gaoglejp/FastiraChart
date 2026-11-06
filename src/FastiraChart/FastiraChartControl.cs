@@ -2664,7 +2664,18 @@ public partial class FastiraChartControl : Control
 
         // The lens labels are measured against the same DPI.
         InvalidateLensLabels();
-        Recompose(ChartLayers.Axis | ChartLayers.Layout | ChartLayers.Lens);
+
+        // So is the width of the columns a reduced series is built in.
+        var layers = ChartLayers.Axis | ChartLayers.Layout | ChartLayers.Lens;
+
+        if (HasReducedSeries())
+        {
+            _seriesEpoch++;
+            _lensEpochY++;
+            layers |= ChartLayers.Series;
+        }
+
+        Recompose(layers);
 
         // The tooltip text is measured against the same DPI.
         RefreshInteraction();
@@ -2685,7 +2696,13 @@ public partial class FastiraChartControl : Control
         control.ApplyPlotClip();
 
         // The clip is applied when the frame is drawn, not placed into the geometry: every series'
-        // geometry is reused, and only the frame is composed again with the new setting.
+        // geometry is reused, and only the frame is composed again with the new setting. Only a reduced series has left
+        // out what the clip would hide, and has to be built again. The lens has a clip of its own, whatever this says.
+        if (control.HasReducedSeries())
+        {
+            control._seriesEpoch++;
+        }
+
         control.Recompose(ChartLayers.Series);
     }
 
@@ -3779,8 +3796,9 @@ public partial class FastiraChartControl : Control
     /// against. A composition builds again only a series whose points moved on, or every series once the range or
     /// the plot moved (<see cref="Invalidate"/> starts a new epoch). A style change — a stroke, a change inside it, a
     /// thickness, <see cref="SeriesStroke"/>, <see cref="ClipToPlotArea"/> — strokes the very geometry the last frame
-    /// drew. One geometry per series is kept, the latest, never a history; a removed series' entry goes with the next
-    /// composition.
+    /// drew, except for a series with <see cref="LineSeries.IsRenderReductionEnabled"/>, whose geometry depends on the
+    /// thickness and the clip. One geometry per series is kept, the latest, never a history; a removed series' entry goes
+    /// with the next composition.
     /// </para>
     /// <para>
     /// <b>A hidden series builds nothing</b>, however its points change while hidden. Its entry is kept as it was,
@@ -3848,7 +3866,7 @@ public partial class FastiraChartControl : Control
                     {
                         var points = item.Points;
 
-                        geometry = SeriesPlacement.Build(points, scale);
+                        geometry = PlaceSeries(item, points, scale, ClipToPlotArea);
                         entry = entry with { Epoch = _seriesEpoch, GeometryGeneration = item.GeometryGeneration, Geometry = geometry };
                         _cacheCounters.SeriesGeometryBuilds++;
                         _processingCounters.SeriesPointsPlaced += points.Count;
@@ -3864,6 +3882,33 @@ public partial class FastiraChartControl : Control
         _seriesPens = pens;
 
         return new SeriesFrame(placed, plot, ClipToPlotArea);
+    }
+
+    /// <summary>One series' geometry for a scale, for the main plot or the lens: every point, or reduced if it asked to be.</summary>
+    /// <param name="item">The series.</param>
+    /// <param name="points">Its points.</param>
+    /// <param name="scale">The scale to place them by.</param>
+    /// <param name="clipped">Whether what is drawn is clipped to the scale's rectangle.</param>
+    private SeriesGeometry PlaceSeries(LineSeries item, IReadOnlyList<ChartPoint> points, in SeriesScale scale, bool clipped)
+        => item.IsRenderReductionEnabled
+            ? SeriesPlacement.BuildReduced(points, scale, VisualTreeHelper.GetDpi(this).PixelsPerDip, clipped, item.StrokeThickness)
+            : SeriesPlacement.Build(points, scale);
+
+    /// <summary>Whether any series asks for reduced geometry, which a change of DPI or clip then has to build again.</summary>
+    private bool HasReducedSeries()
+    {
+        if (Series is { } series)
+        {
+            foreach (var item in series)
+            {
+                if (item is { IsRenderReductionEnabled: true })
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

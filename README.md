@@ -112,12 +112,30 @@ they are drawn in collection order.
 | `Stroke` | Line brush. `null` (default) uses the chart's `SeriesStroke` |
 | `StrokeThickness` | Line thickness in DIP. Default `2` |
 | `IsVisible` | Whether the series is drawn. Default `true` |
+| `IsRenderReductionEnabled` | Whether the line may be drawn from fewer points, for large series. Default `false` |
 
 - A point that is not finite (`NaN`, `±Infinity`) is a **gap**: nothing is drawn across it.
 - Points outside the axis ranges are kept and placed where they lie; `ClipToPlotArea` (default `true`) clips the
   series to the plot.
-- Points are never sorted, merged or thinned.
+- Points are never sorted, merged or thinned, unless you turn on `IsRenderReductionEnabled`. That affects drawing only:
+  `Points` still reads back every point.
 - FastiraChart never modifies a list, brush or series you give it.
+
+### Large series
+
+By default every point is drawn, and WPF's cost to draw a line grows quickly with its point count. Set
+`IsRenderReductionEnabled` on a series with more points than the plot has pixels:
+
+```csharp
+Signal.IsRenderReductionEnabled = true;
+```
+
+Of consecutive points in one column (two per device pixel), the first, last, lowest and highest are drawn, so a spike of
+a single point stays and a gap stays a gap. While `ClipToPlotArea` is `true`, lines that cannot reach the plot are left
+out too. A series with fewer than about 16 points per column is not reduced.
+
+The result is close to drawing every point, not identical: a dense or noisy line can look somewhat lighter. A series
+that moves across columns with nearly every point, such as a dense curve whose X runs back and forth, gains little.
 
 ## Streaming Updates
 
@@ -270,7 +288,8 @@ element may apply `BorderThickness` but must not apply `Padding`: the control ap
 ## Known Limitations
 
 1. A long-running `LineSeries` retains all points; trim it by replacing `Points` or with `ClearPoints`.
-2. Changing a series rebuilds its WPF line geometry; the cost increases with the series' point count.
+2. Changing a series rebuilds its WPF line geometry; the cost increases with the series' point count. See
+   [Large series](#large-series).
 3. Mixed-DPI behavior has not yet been validated on multiple physical monitors with different DPI.
 4. Lens labels near the lens edge may be clipped.
 5. Long axis labels may overlap; label rotation can be used to manage this.
@@ -287,7 +306,8 @@ FastiraChart is designed with update performance as a primary goal:
 - **Cheap appends.** `Append` and `AppendRange` add to storage the series owns, without copying the points already
   there.
 - **No per-element visuals.** Each layer is one drawing element, however many ticks, labels, lines or points it draws.
-- **No hidden work.** Ranges are never derived from the data, and points are never sorted or resampled.
+- **No hidden work.** Ranges are never derived from the data, and points are never sorted or resampled unless a series
+  asks for it with `IsRenderReductionEnabled`.
 
 ## Samples
 

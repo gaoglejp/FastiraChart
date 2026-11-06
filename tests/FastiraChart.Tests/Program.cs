@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Windows;
@@ -50,6 +51,14 @@ internal static class Program
             ("An inactive lens lets go of its series and reference entries", InactiveLensKeepsNoEntries),
             ("A lens without a vertical scale lets go of its series entries", LensWithoutScaleKeepsNoSeries),
             ("A series removed while the lens is hidden can be collected", SeriesRemovedWhileLensHiddenIsCollected),
+            ("Reduction leaves a small series exactly as it was", ReductionLeavesSmallSeriesExact),
+            ("Reduction keeps a one-point spike and the line's extent", ReductionKeepsSpike),
+            ("Reduction keeps gaps", ReductionKeepsGaps),
+            ("Reduction accepts X in any order", ReductionAcceptsAnyXOrder),
+            ("Reduction keeps a segment that crosses the plot from off it", ReductionKeepsCrossingSegment),
+            ("Reduction leaves out what is off the plot only when clipped", ReductionLeavesOutOffPlotOnlyWhenClipped),
+            ("Reduction does not change Points", ReductionDoesNotChangePoints),
+            ("What a reduced series depends on builds it again", ReducedSeriesRebuilds),
         ];
 
         return TestRunner.Run(cases) == 0 ? 0 : 1;
@@ -255,6 +264,7 @@ internal static class Program
         Assert.Equal(true, series.IsVisible, "LineSeries.IsVisible");
         Assert.True(series.Stroke is null, "LineSeries.Stroke is null (uses SeriesStroke)");
         Assert.Equal(2d, series.StrokeThickness, "LineSeries.StrokeThickness");
+        Assert.Equal(false, series.IsRenderReductionEnabled, "LineSeries.IsRenderReductionEnabled");
 
         var line = new ChartReferenceLine();
         Assert.Equal(ReferenceLineAxis.X, line.Axis, "ChartReferenceLine.Axis");
@@ -560,6 +570,187 @@ internal static class Program
         var (references, series, _) = ((int, int, int))property.GetValue(chart)!;
 
         return (references, series);
+    }
+
+    // ---------------------------------------------------------------- render reduction
+
+    private static void ReductionLeavesSmallSeriesExact()
+    {
+        // Below the threshold of 16 points per column: 760 DIP at two columns per DIP is 24,320 points.
+        var points = Wave(24_000);
+        var full = Place(points, reduced: false);
+        var kept = Place(points, reduced: true);
+
+        Assert.Equal(full.Segments, kept.Segments, "segments");
+        Assert.Equal(full.Geometry!.ToString(CultureInfo.InvariantCulture), kept.Geometry!.ToString(CultureInfo.InvariantCulture), "geometry");
+    }
+
+    private static void ReductionKeepsSpike()
+    {
+        const int Count = 100_000;
+        var points = new ChartPoint[Count];
+
+        for (var i = 0; i < Count; i++)
+        {
+            points[i] = new ChartPoint(i, i == 54_321 ? 1.4 : i == 12_345 ? -1.3 : 0);
+        }
+
+        var full = Place(points, reduced: false);
+        var kept = Place(points, reduced: true);
+
+        Assert.True(kept.Segments < 3_100, $"reduced to a few segments per column: {kept.Segments}");
+        Assert.Equal(Count, kept.Placed, "every point counts as placed");
+        Assert.Equal(full.Geometry!.Bounds, kept.Geometry!.Bounds, "bounds");
+    }
+
+    private static void ReductionKeepsGaps()
+    {
+        const int Count = 100_000;
+        var points = Wave(Count);
+
+        for (var i = 40_000; i < 41_000; i++)
+        {
+            points[i] = new ChartPoint(i, double.NaN);
+        }
+
+        var full = Place(points, reduced: false);
+        var kept = Place(points, reduced: true);
+
+        Assert.Equal(2, kept.Figures, "one figure each side of the gap");
+        Assert.Equal(full.Gaps, kept.Gaps, "gaps");
+        Assert.Equal(full.Placed, kept.Placed, "placed");
+        Assert.True(kept.Segments < full.Segments / 10, $"reduced: {kept.Segments}");
+        Assert.True(!kept.Geometry!.StrokeContains(new Pen(Brushes.Black, 1), new Point(760 * 0.405, 180)), "nothing is drawn across the gap");
+    }
+
+    private static void ReductionAcceptsAnyXOrder()
+    {
+        const int Count = 100_000;
+        var points = new ChartPoint[Count];
+
+        // Back and forth over the whole range, slowly enough for runs to stay within a column.
+        for (var i = 0; i < Count; i++)
+        {
+            var phase = (i % 20_000) / 10_000d;
+            points[i] = new ChartPoint((phase < 1 ? phase : 2 - phase) * Count, Math.Sin(i * 0.01));
+        }
+
+        var full = Place(points, reduced: false);
+        var kept = Place(points, reduced: true);
+
+        Assert.True(kept.Segments < full.Segments, $"reduced: {kept.Segments}");
+        Assert.True(Math.Abs(full.Geometry!.Bounds.Top - kept.Geometry!.Bounds.Top) < 1e-9, "top");
+        Assert.True(Math.Abs(full.Geometry.Bounds.Bottom - kept.Geometry.Bounds.Bottom) < 1e-9, "bottom");
+        Assert.True(Math.Abs(full.Geometry.Bounds.Left - kept.Geometry.Bounds.Left) < 0.5, "left");
+        Assert.True(Math.Abs(full.Geometry.Bounds.Right - kept.Geometry.Bounds.Right) < 0.5, "right");
+    }
+
+    private static void ReductionKeepsCrossingSegment()
+    {
+        const int Count = 100_000;
+        var points = new ChartPoint[Count];
+
+        // All far to the left of the plot, wandering, then one last point far to its right, at the same height.
+        for (var i = 0; i < Count - 1; i++)
+        {
+            points[i] = new ChartPoint(-Count + i * 0.001, i == Count - 2 ? 0 : Math.Sin(i * 0.01));
+        }
+
+        points[Count - 1] = new ChartPoint(Count * 2d, 0);
+
+        var kept = Place(points, reduced: true);
+
+        Assert.True(kept.Segments < 5, $"the run off the plot is one line: {kept.Segments}");
+        Assert.True(kept.Geometry!.StrokeContains(new Pen(Brushes.Black, 1), new Point(380, 180)), "the line across the plot");
+    }
+
+    private static void ReductionLeavesOutOffPlotOnlyWhenClipped()
+    {
+        const int Count = 100_000;
+        var points = new ChartPoint[Count];
+
+        // Nearly all of it above the plot, through many columns.
+        for (var i = 0; i < Count; i++)
+        {
+            points[i] = new ChartPoint(i, 3 + Math.Sin(i * 0.5));
+        }
+
+        var clipped = Place(points, reduced: true, clipped: true);
+        var unclipped = Place(points, reduced: true, clipped: false);
+
+        Assert.True(clipped.Segments == 1, $"one line above the plot: {clipped.Segments}");
+        Assert.True(unclipped.Segments > 1_000, $"unclipped, every column: {unclipped.Segments}");
+    }
+
+    private static void ReductionDoesNotChangePoints()
+    {
+        var points = Wave(100_000);
+        var series = new LineSeries(points) { IsRenderReductionEnabled = true };
+        var chart = new FastiraChartControl { IsLensVisible = true };
+        chart.Series.Add(series);
+        Arranged(chart);
+
+        Assert.Same(points, series.Points, "Points is still the caller's list");
+        Assert.Equal(100_000, series.Points.Count, "Points.Count");
+    }
+
+    private static void ReducedSeriesRebuilds()
+    {
+        var plain = new LineSeries(Wave(100));
+        var chart = new FastiraChartControl();
+        chart.Series.Add(plain);
+        Arranged(chart);
+
+        // Nothing a plain series is not drawn from builds it again.
+        int Builds(Action change)
+        {
+            var before = chart.GetType().GetProperty("CacheCounters", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(chart)!;
+            change();
+            chart.UpdateLayout();
+            var after = chart.GetType().GetProperty("CacheCounters", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(chart)!;
+            var builds = before.GetType().GetProperty("SeriesGeometryBuilds")!;
+
+            return (int)builds.GetValue(after)! - (int)builds.GetValue(before)!;
+        }
+
+        Assert.Equal(0, Builds(() => plain.StrokeThickness = 3), "plain: thickness");
+        Assert.Equal(0, Builds(() => chart.ClipToPlotArea = false), "plain: clip");
+        Assert.Equal(1, Builds(() => plain.IsRenderReductionEnabled = true), "turning reduction on");
+        Assert.Equal(1, Builds(() => plain.StrokeThickness = 4), "reduced: thickness");
+        Assert.Equal(1, Builds(() => chart.ClipToPlotArea = true), "reduced: clip");
+        Assert.Equal(0, Builds(() => plain.Stroke = Brushes.Red), "reduced: brush");
+        Assert.Equal(1, Builds(() => plain.IsRenderReductionEnabled = false), "turning reduction off");
+    }
+
+    private static ChartPoint[] Wave(int count)
+    {
+        var points = new ChartPoint[count];
+
+        for (var i = 0; i < count; i++)
+        {
+            points[i] = new ChartPoint(i, Math.Sin(i * 0.002));
+        }
+
+        return points;
+    }
+
+    /// <summary>
+    /// Places points on a 760 x 360 plot, X over 0..the point count and Y over -1.5..1.5, at 96 DPI. What a series is reduced
+    /// to is not observable through the public API, so the internal builders are reached by reflection.
+    /// </summary>
+    private static (StreamGeometry? Geometry, int Figures, int Segments, int Placed, int Gaps) Place(ChartPoint[] points, bool reduced, bool clipped = true)
+    {
+        var placement = typeof(LineSeries).Assembly.GetType("FastiraChart.Series.SeriesPlacement")!;
+        object?[] scaleArguments = [new Rect(0, 0, 760, 360), 0d, (double)points.Length, -1.5, 1.5, null];
+
+        Assert.True((bool)placement.GetMethod("TryCreateScale")!.Invoke(null, scaleArguments)!, "the scale");
+
+        var result = reduced
+            ? placement.GetMethod("BuildReduced")!.Invoke(null, [points, scaleArguments[5], 1d, clipped, 2d])!
+            : placement.GetMethod("Build")!.Invoke(null, [points, scaleArguments[5]])!;
+        T Read<T>(string name) => (T)result.GetType().GetProperty(name)!.GetValue(result)!;
+
+        return (Read<StreamGeometry?>("Geometry"), Read<int>("Figures"), Read<int>("Segments"), Read<int>("Placed"), Read<int>("Gaps"));
     }
 
     // ---------------------------------------------------------------- helpers
