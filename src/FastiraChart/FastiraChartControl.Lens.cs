@@ -118,7 +118,9 @@ public partial class FastiraChartControl
     /// Called by the layer when it renders a stale frame, once per frame however many changes came before it. Placed
     /// against <c>_tickPlotBounds</c> — the rectangle every main layer is placed against. An inactive lens — hidden, with no
     /// source inside the main range, or no room in the plot — composes no content at all, so nothing stale survives it,
-    /// and builds nothing while it stays so.
+    /// and builds nothing while it stays so. It lets go of its reference and series entries too: they would hold removed
+    /// items and whole series geometries alive for as long as it stays inactive, and the placement that makes it active
+    /// again is a new X epoch, in which no series geometry could be reused anyway.
     /// </remarks>
     private LensComposition BuildLens()
     {
@@ -151,6 +153,8 @@ public partial class FastiraChartControl
         if (!part.Active || !LinearAxisMapping.TryGetInverseRange(MinimumX, MaximumX, out var inverse))
         {
             _lensShown = false;
+            _lensReferences.Clear();
+            _lensSeries.Clear();
 
             return new LensComposition(LensFrame.Inactive(plot), LensContent.Empty);
         }
@@ -217,6 +221,12 @@ public partial class FastiraChartControl
         else
         {
             _lensCounters.YHits++;
+        }
+
+        // No scale, no series drawn: what gives the lens a scale again moves an epoch, so nothing here could be reused.
+        if (!hasScale)
+        {
+            _lensSeries.Clear();
         }
 
         return new LensContent(

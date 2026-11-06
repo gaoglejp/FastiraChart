@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -46,6 +47,9 @@ internal static class Program
             ("Explicit OneWay binding is kept by a current-value write", ExplicitOneWayBinding),
             ("Range and lens properties bind TwoWay by default", DefaultTwoWayBinding),
             ("Custom template with missing parts does not crash", CustomTemplateMissingParts),
+            ("An inactive lens lets go of its series and reference entries", InactiveLensKeepsNoEntries),
+            ("A lens without a vertical scale lets go of its series entries", LensWithoutScaleKeepsNoSeries),
+            ("A series removed while the lens is hidden can be collected", SeriesRemovedWhileLensHiddenIsCollected),
         ];
 
         return TestRunner.Run(cases) == 0 ? 0 : 1;
@@ -478,6 +482,84 @@ internal static class Program
 
             Assert.True(IsFinite(chart.PlotBounds), $"PlotBounds with a reduced template: {chart.PlotBounds}");
         }
+    }
+
+    // ---------------------------------------------------------------- lens memory
+
+    private static void InactiveLensKeepsNoEntries()
+    {
+        var chart = ChartWithLens();
+        Assert.Equal((1, 1), LensEntries(chart), "lens entries while shown");
+
+        chart.IsLensVisible = false;
+        chart.UpdateLayout();
+        Assert.Equal((0, 0), LensEntries(chart), "lens entries while hidden");
+
+        chart.IsLensVisible = true;
+        chart.UpdateLayout();
+        Assert.Equal((1, 1), LensEntries(chart), "lens entries when shown again");
+
+        // No source inside the main range: visible, and still inactive.
+        chart.LensMinimumX = 200;
+        chart.LensMaximumX = 300;
+        chart.UpdateLayout();
+        Assert.Equal((0, 0), LensEntries(chart), "lens entries with its source outside the main range");
+    }
+
+    private static void LensWithoutScaleKeepsNoSeries()
+    {
+        var chart = ChartWithLens();
+        Assert.Equal(1, LensEntries(chart).Series, "lens series entries with a scale");
+
+        chart.MaximumY = chart.MinimumY;
+        chart.UpdateLayout();
+        Assert.Equal(0, LensEntries(chart).Series, "lens series entries without a scale");
+    }
+
+    private static void SeriesRemovedWhileLensHiddenIsCollected()
+    {
+        var chart = ChartWithLens();
+        var removed = HideLensAndRemoveSeries(chart);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        Assert.True(!removed.IsAlive, "the removed series is still reachable from the chart");
+        GC.KeepAlive(chart);
+    }
+
+    // Not inlined: no local of the caller may hold the series while it is collected.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static WeakReference HideLensAndRemoveSeries(FastiraChartControl chart)
+    {
+        var removed = new WeakReference(chart.Series[0]);
+
+        chart.IsLensVisible = false;
+        chart.UpdateLayout();
+        chart.Series.Clear();
+        chart.UpdateLayout();
+
+        return removed;
+    }
+
+    /// <summary>A chart arranged with its lens shown, one series and one reference line.</summary>
+    private static FastiraChartControl ChartWithLens()
+    {
+        var chart = new FastiraChartControl { IsLensVisible = true };
+        chart.Series.Add(new LineSeries([new ChartPoint(0, 0), new ChartPoint(100, 100)]));
+        chart.ReferenceLines.Add(new ChartReferenceLine { Axis = ReferenceLineAxis.Y, Value = 50 });
+
+        return Arranged(chart);
+    }
+
+    /// <summary>The control's internal lens cache count: what the lens holds is not observable through the public API.</summary>
+    private static (int References, int Series) LensEntries(FastiraChartControl chart)
+    {
+        var property = typeof(FastiraChartControl).GetProperty("LensCacheEntries", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var (references, series, _) = ((int, int, int))property.GetValue(chart)!;
+
+        return (references, series);
     }
 
     // ---------------------------------------------------------------- helpers

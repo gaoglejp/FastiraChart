@@ -1951,9 +1951,9 @@ public partial class FastiraChartControl : Control
             _labelLayer?.Invalidate();
         }
 
-        // A hidden lens that drew nothing last is not composed for a change it would not draw; everything it
-        // draws from is kept by generation and epoch, so it shows the latest state when it is shown again — which composes
-        // it, as does the change that hides it.
+        // A hidden lens that drew nothing last is not composed for a change it would not draw. It keeps no series or
+        // reference entry, and the rest it draws from is kept by generation and epoch, so it shows the latest state when
+        // it is shown again — which composes it, as does the change that hides it.
         if ((layers & ChartLayers.Lens) != 0 && _lensLayer is { } lens && (IsLensVisible || _lensShown))
         {
             _lensCounters.Invalidations++;
