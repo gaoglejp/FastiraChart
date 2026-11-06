@@ -59,7 +59,8 @@ internal readonly record struct SeriesGeometry(StreamGeometry? Geometry, int Fig
 /// <para>
 /// <b>Every finite point is placed</b>, including one far outside the range: the segments to it keep their
 /// direction, and the clip decides what is seen. A point is a gap only when a value is not finite, or when
-/// it lies so far outside that its coordinate overflows. Nothing is sorted, merged or skipped for density.
+/// it lies so far outside that its coordinate overflows. Nothing is sorted, merged or skipped for density,
+/// unless the series asks for it: see <see cref="BuildReduced"/>.
 /// </para>
 /// <para>
 /// <b>The render guard.</b> WPF does not draw a line whose coordinates are too large: a segment
@@ -93,6 +94,18 @@ internal static class SeriesPlacement
     /// </para>
     /// </remarks>
     internal const double RenderGuardMargin = 16384;
+
+    /// <summary>How many columns of <see cref="BuildReduced"/> one device pixel holds.</summary>
+    /// <remarks>
+    /// Measured against full geometry on noisy series, by rendered coverage. One column per pixel moved some pixels by more
+    /// than half their coverage, on up to 2.8% of the painted pixels; two brought that to 0.02% at most, for about twice
+    /// the line. Four gained little more and cost a noisy series its frame rate.
+    /// </remarks>
+    internal const double ReductionColumnsPerPixel = 2;
+
+    /// <summary>How many points per column a series must have, on average, for <see cref="BuildReduced"/> to reduce it.</summary>
+    /// <remarks>Below this little would be left out, and full geometry is still cheap to draw.</remarks>
+    internal const double ReductionMinimumPointsPerColumn = 16;
 
     /// <summary>
     /// The scale for a plot and two ranges, if every series can be placed by it.
@@ -175,13 +188,8 @@ internal static class SeriesPlacement
     /// </remarks>
     public static SeriesGeometry Build(IReadOnlyList<ChartPoint> points, in SeriesScale scale)
     {
-        StreamGeometry? geometry = null;
-        StreamGeometryContext? context = null;
-        int figures = 0, segments = 0, placed = 0, gaps = 0, trimmed = 0;
-        var guard = Guard(scale.Plot);
-        var open = false;
-        var hasPrevious = false;
-        var previous = default(Point);
+        var writer = new GeometryWriter(Guard(scale.Plot));
+        int placed = 0, gaps = 0;
 
         try
         {
@@ -190,70 +198,128 @@ internal static class SeriesPlacement
                 if (!TryMap(scale, points[i], out var coordinate))
                 {
                     gaps++;
-                    open = false;
-                    hasPrevious = false;
+                    writer.Break();
+
+                    continue;
+                }
+
+                placed++;
+                writer.Add(coordinate);
+            }
+        }
+        finally
+        {
+            writer.Close();
+        }
+
+        return writer.Finish(placed, gaps);
+    }
+
+    /// <summary>
+    /// Builds the geometry for one series that asked for render reduction, leaving out points that cannot change much of
+    /// what is seen; see <see cref="LineSeries.IsRenderReductionEnabled"/>.
+    /// </summary>
+    /// <param name="points">The series' points, which are only read.</param>
+    /// <param name="scale">The scale to place them by.</param>
+    /// <param name="pixelsPerDip">Device pixels per DIP, which sets the width of a column.</param>
+    /// <param name="clipped">Whether the stroke is clipped to the scale's rectangle, so that what lies off it is not seen.</param>
+    /// <param name="thickness">The stroke's thickness, which says how far off the rectangle a line can still reach into it.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>Too few points to be worth it.</b> A series with fewer than <see cref="ReductionMinimumPointsPerColumn"/> points per
+    /// column on average goes to <see cref="Build"/> and draws exactly what it would have drawn.
+    /// </para>
+    /// <para>
+    /// <b>Off the rectangle, when clipped.</b> Of a run of consecutive points that all lie beyond one edge, by more than the
+    /// stroke reaches, only the first and the last are kept. A half-plane is convex, so neither the lines left out nor the
+    /// one that replaces them can touch the rectangle, and a segment that really crosses it keeps both its ends.
+    /// </para>
+    /// <para>
+    /// <b>Column by column.</b> Of a run of consecutive points in one column, the first, the last, the lowest and the
+    /// highest are kept, in their order. Only consecutive points merge, so X need not be sorted — a series that doubles back
+    /// just has more runs — and a gap ends a run, so the line still never crosses one. Every point kept is at the very
+    /// coordinate <see cref="Build"/> gives it, and the render guard is passed through the same way.
+    /// </para>
+    /// </remarks>
+    public static SeriesGeometry BuildReduced(IReadOnlyList<ChartPoint> points, in SeriesScale scale, double pixelsPerDip, bool clipped, double thickness)
+    {
+        var columnsPerDip = ReductionColumnsPerPixel * pixelsPerDip;
+
+        if (points.Count < ReductionMinimumPointsPerColumn * scale.Plot.Width * columnsPerDip)
+        {
+            return Build(points, scale);
+        }
+
+        var writer = new GeometryWriter(Guard(scale.Plot));
+        var column = new ColumnRun(columnsPerDip);
+        var reach = (thickness / 2) + 1;
+        var plot = scale.Plot;
+        var (left, top, right, bottom) = (plot.Left - reach, plot.Top - reach, plot.Right + reach, plot.Bottom + reach);
+        var runSides = 0;
+        var hasRunLast = false;
+        var runLast = default(Point);
+        int placed = 0, gaps = 0;
+
+        try
+        {
+            for (var i = 0; i < points.Count; i++)
+            {
+                if (!TryMap(scale, points[i], out var coordinate))
+                {
+                    if (hasRunLast)
+                    {
+                        column.Add(runLast, ref writer);
+                    }
+
+                    runSides = 0;
+                    hasRunLast = false;
+                    column.Flush(ref writer);
+                    gaps++;
+                    writer.Break();
 
                     continue;
                 }
 
                 placed++;
 
-                if (!hasPrevious)
+                if (clipped)
                 {
-                    previous = coordinate;
-                    hasPrevious = true;
+                    var sides = (coordinate.X < left ? 1 : 0) | (coordinate.X > right ? 2 : 0) | (coordinate.Y < top ? 4 : 0) | (coordinate.Y > bottom ? 8 : 0);
 
-                    continue;
-                }
-
-                var inside = TryGuard(previous, coordinate, guard, out var start, out var end, out var startCut, out var endCut);
-
-                if (startCut || endCut || !inside)
-                {
-                    trimmed++;
-                }
-
-                if (inside)
-                {
-                    if (!open || startCut)
+                    if ((runSides & sides) != 0)
                     {
-                        if (context is null)
-                        {
-                            geometry = new StreamGeometry();
-                            context = geometry.Open();
-                        }
+                        runSides &= sides;
+                        runLast = coordinate;
+                        hasRunLast = true;
 
-                        context.BeginFigure(start, isFilled: false, isClosed: false);
-                        figures++;
+                        continue;
                     }
 
-                    context!.LineTo(end, isStroked: true, isSmoothJoin: false);
-                    segments++;
+                    if (hasRunLast)
+                    {
+                        column.Add(runLast, ref writer);
+                    }
 
-                    // A segment cut where it leaves the band ends its figure there; the next starts afresh.
-                    open = !endCut;
-                }
-                else
-                {
-                    open = false;
+                    runSides = sides;
+                    hasRunLast = false;
                 }
 
-                previous = coordinate;
+                column.Add(coordinate, ref writer);
             }
+
+            if (hasRunLast)
+            {
+                column.Add(runLast, ref writer);
+            }
+
+            column.Flush(ref writer);
         }
         finally
         {
-            context?.Close();
+            writer.Close();
         }
 
-        if (geometry is null)
-        {
-            return new SeriesGeometry(null, 0, 0, placed, gaps, trimmed);
-        }
-
-        geometry.Freeze();
-
-        return new SeriesGeometry(geometry, figures, segments, placed, gaps, trimmed);
+        return writer.Finish(placed, gaps);
     }
 
     /// <summary>The render guard around a plot: left, top, right and bottom.</summary>
@@ -361,5 +427,169 @@ internal static class SeriesPlacement
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Writes placed points into one <see cref="StreamGeometry"/>: one figure per unbroken run, each segment through the
+    /// render guard.
+    /// </summary>
+    private struct GeometryWriter((double Left, double Top, double Right, double Bottom) guard)
+    {
+        private StreamGeometry? _geometry;
+        private StreamGeometryContext? _context;
+        private int _figures;
+        private int _segments;
+        private int _trimmed;
+        private bool _open;
+        private bool _hasPrevious;
+        private Point _previous;
+
+        /// <summary>Takes the next placed point: the end of a segment from the one before it, if there is one.</summary>
+        public void Add(Point coordinate)
+        {
+            if (!_hasPrevious)
+            {
+                _previous = coordinate;
+                _hasPrevious = true;
+
+                return;
+            }
+
+            var inside = TryGuard(_previous, coordinate, guard, out var start, out var end, out var startCut, out var endCut);
+
+            if (startCut || endCut || !inside)
+            {
+                _trimmed++;
+            }
+
+            if (inside)
+            {
+                if (!_open || startCut)
+                {
+                    if (_context is null)
+                    {
+                        _geometry = new StreamGeometry();
+                        _context = _geometry.Open();
+                    }
+
+                    _context.BeginFigure(start, isFilled: false, isClosed: false);
+                    _figures++;
+                }
+
+                _context!.LineTo(end, isStroked: true, isSmoothJoin: false);
+                _segments++;
+
+                // A segment cut where it leaves the band ends its figure there; the next starts afresh.
+                _open = !endCut;
+            }
+            else
+            {
+                _open = false;
+            }
+
+            _previous = coordinate;
+        }
+
+        /// <summary>A gap: the line stops here, and the next point starts it again.</summary>
+        public void Break()
+        {
+            _open = false;
+            _hasPrevious = false;
+        }
+
+        /// <summary>Ends the writing, whether or not it got to the last point.</summary>
+        public readonly void Close() => _context?.Close();
+
+        /// <summary>The frozen geometry and what went into it, once closed.</summary>
+        public readonly SeriesGeometry Finish(int placed, int gaps)
+        {
+            if (_geometry is not { } geometry)
+            {
+                return new SeriesGeometry(null, 0, 0, placed, gaps, _trimmed);
+            }
+
+            geometry.Freeze();
+
+            return new SeriesGeometry(geometry, _figures, _segments, placed, gaps, _trimmed);
+        }
+    }
+
+    /// <summary>
+    /// The run of consecutive points in one column: its first goes through at once, and its lowest, highest and last when
+    /// the run ends.
+    /// </summary>
+    private struct ColumnRun(double columnsPerDip)
+    {
+        private bool _active;
+        private double _column;
+        private Point _low;
+        private Point _high;
+        private Point _last;
+        private int _lowAt;
+        private int _highAt;
+        private int _lastAt;
+
+        /// <summary>Takes the next point, ending the run when the point lies in another column.</summary>
+        public void Add(Point coordinate, ref GeometryWriter writer)
+        {
+            var column = Math.Floor(coordinate.X * columnsPerDip);
+
+            if (_active && column == _column)
+            {
+                _lastAt++;
+                _last = coordinate;
+
+                if (coordinate.Y < _low.Y)
+                {
+                    _low = coordinate;
+                    _lowAt = _lastAt;
+                }
+
+                if (coordinate.Y > _high.Y)
+                {
+                    _high = coordinate;
+                    _highAt = _lastAt;
+                }
+
+                return;
+            }
+
+            Flush(ref writer);
+            writer.Add(coordinate);
+            _active = true;
+            _column = column;
+            _low = _high = _last = coordinate;
+            _lowAt = _highAt = _lastAt = 0;
+        }
+
+        /// <summary>Ends the run, writing what it kept after its first point, in the order the points came.</summary>
+        public void Flush(ref GeometryWriter writer)
+        {
+            if (!_active)
+            {
+                return;
+            }
+
+            _active = false;
+
+            var lowFirst = _lowAt <= _highAt;
+            var earlierAt = lowFirst ? _lowAt : _highAt;
+            var laterAt = lowFirst ? _highAt : _lowAt;
+
+            if (earlierAt != 0 && earlierAt != _lastAt)
+            {
+                writer.Add(lowFirst ? _low : _high);
+            }
+
+            if (laterAt != 0 && laterAt != _lastAt && laterAt != earlierAt)
+            {
+                writer.Add(lowFirst ? _high : _low);
+            }
+
+            if (_lastAt != 0)
+            {
+                writer.Add(_last);
+            }
+        }
     }
 }

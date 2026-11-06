@@ -379,7 +379,8 @@ public partial class FastiraChartControl
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <see cref="SeriesPlacement.Build"/> itself, handed the lens scale: every finite point is placed — including one
+    /// <see cref="SeriesPlacement.Build"/> itself (or <see cref="SeriesPlacement.BuildReduced"/>, for a series that asked
+    /// for it), handed the lens scale: every finite point is placed — including one
     /// outside the lens source, so a segment between a point left of the source and one right of it crosses the lens and
     /// is drawn, the clip deciding what shows — non-finite values are gaps the line never crosses, and the render guard cuts
     /// a segment reaching too far past the lens rectangle where it leaves the guard band, so a large offset or a high
@@ -423,7 +424,8 @@ public partial class FastiraChartControl
             {
                 var points = item.Points;
 
-                geometry = SeriesPlacement.Build(points, scale);
+                // Whatever the main clip is set to: everything in the lens is clipped to the lens.
+                geometry = PlaceSeries(item, points, scale, clipped: true);
                 entry = new LensSeriesEntry(_lensEpochX, _lensEpochY, item.GeometryGeneration, geometry);
                 _lensCounters.SeriesBuilds++;
                 _processingCounters.LensSeriesPointsPlaced += points.Count;
